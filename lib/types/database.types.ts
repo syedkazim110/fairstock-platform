@@ -93,6 +93,129 @@ export interface Database {
           created_at?: string
         }
       }
+      documents: {
+        Row: {
+          id: string
+          company_id: string
+          title: string
+          description: string | null
+          file_path: string
+          file_name: string
+          file_size: number
+          file_type: string
+          uploaded_by: string | null
+          status: 'pending' | 'partially_signed' | 'fully_signed' | 'cancelled'
+          requires_all_signatures: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          title: string
+          description?: string | null
+          file_path: string
+          file_name: string
+          file_size: number
+          file_type: string
+          uploaded_by?: string | null
+          status?: 'pending' | 'partially_signed' | 'fully_signed' | 'cancelled'
+          requires_all_signatures?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          title?: string
+          description?: string | null
+          file_path?: string
+          file_name?: string
+          file_size?: number
+          file_type?: string
+          uploaded_by?: string | null
+          status?: 'pending' | 'partially_signed' | 'fully_signed' | 'cancelled'
+          requires_all_signatures?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      document_signatures: {
+        Row: {
+          id: string
+          document_id: string
+          board_member_id: string
+          company_id: string
+          status: 'pending' | 'signed' | 'declined'
+          signature_data: string | null
+          signed_at: string | null
+          declined_at: string | null
+          decline_reason: string | null
+          ip_address: string | null
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          document_id: string
+          board_member_id: string
+          company_id: string
+          status?: 'pending' | 'signed' | 'declined'
+          signature_data?: string | null
+          signed_at?: string | null
+          declined_at?: string | null
+          decline_reason?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          document_id?: string
+          board_member_id?: string
+          company_id?: string
+          status?: 'pending' | 'signed' | 'declined'
+          signature_data?: string | null
+          signed_at?: string | null
+          declined_at?: string | null
+          decline_reason?: string | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+      }
+      document_audit_log: {
+        Row: {
+          id: string
+          document_id: string
+          user_id: string | null
+          action: 'uploaded' | 'signature_requested' | 'signed' | 'declined' | 'viewed' | 'downloaded' | 'cancelled'
+          details: Json | null
+          ip_address: string | null
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          document_id: string
+          user_id?: string | null
+          action: 'uploaded' | 'signature_requested' | 'signed' | 'declined' | 'viewed' | 'downloaded' | 'cancelled'
+          details?: Json | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          document_id?: string
+          user_id?: string | null
+          action?: 'uploaded' | 'signature_requested' | 'signed' | 'declined' | 'viewed' | 'downloaded' | 'cancelled'
+          details?: Json | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+      }
     cap_table_entries: {
       Row: {
         id: string

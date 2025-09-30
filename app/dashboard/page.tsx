@@ -4,6 +4,8 @@ import CreateCompanyModal from '@/components/company/CreateCompanyModal'
 import CompanyList from '@/components/company/CompanyList'
 import MyHoldings from '@/components/dashboard/MyHoldings'
 import { signOut } from '@/app/actions/auth'
+import { getPendingDocuments } from '@/app/actions/documents'
+import DashboardPendingDocuments from '@/components/dashboard/DashboardPendingDocuments'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -127,6 +129,9 @@ export default async function DashboardPage() {
     h.company && h.company.owner_id !== user.id
   )
 
+  // Get pending documents for signature
+  const { signatures: pendingSignatures } = await getPendingDocuments()
+
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -160,6 +165,21 @@ export default async function DashboardPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Pending Signatures Section */}
+        {pendingSignatures && pendingSignatures.length > 0 && (
+          <div className="mb-12">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Pending Signatures
+              </h2>
+              <p className="text-gray-600 text-sm mt-1">
+                Documents waiting for your signature
+              </p>
+            </div>
+            <DashboardPendingDocuments signatures={pendingSignatures} />
+          </div>
+        )}
+
         {/* My Companies Section */}
         <div className="mb-12">
           <div className="flex items-center justify-between mb-6">

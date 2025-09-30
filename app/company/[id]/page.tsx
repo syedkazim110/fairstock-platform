@@ -184,17 +184,20 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
             </div>
           </Link>
 
-          <div className="bg-white rounded-lg shadow p-6">
+          <Link
+            href={`/company/${id}/documents`}
+            className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">Documents</h3>
-                <p className="text-sm text-gray-600">Coming soon</p>
+                <p className="text-sm text-gray-600">Manage signatures and files</p>
               </div>
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
-          </div>
+          </Link>
 
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
