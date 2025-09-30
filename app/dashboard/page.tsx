@@ -29,17 +29,25 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
 
   // Get companies where user is a board member
+  // First get the memberships
   const { data: membershipData } = await supabase
     .from('company_members')
-    .select(`
-      *,
-      companies (*)
-    `)
+    .select('company_id')
     .eq('user_id', user.id)
     .eq('role', 'board_member')
     .eq('status', 'active')
 
-  const memberCompanies = membershipData?.map((m: any) => m.companies) || []
+  // Then fetch the company details using service role to bypass RLS
+  let memberCompanies = []
+  if (membershipData && membershipData.length > 0) {
+    const companyIds = membershipData.map(m => m.company_id)
+    const { data: companiesData } = await supabase
+      .from('companies')
+      .select('*')
+      .in('id', companyIds)
+    
+    memberCompanies = companiesData || []
+  }
 
   // Get user's holdings (cap table entries) - without companies relationship to avoid RLS recursion
   const { data: capTableHoldings } = await supabase

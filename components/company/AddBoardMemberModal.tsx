@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { addBoardMember } from '@/app/actions/company'
 
 interface AddBoardMemberModalProps {
   companyId: string
@@ -22,77 +22,16 @@ export default function AddBoardMemberModal({ companyId, onSuccess }: AddBoardMe
     setLoading(true)
 
     try {
-      const supabase = createClient()
+      // Call the server action
+      const result = await addBoardMember(companyId, email)
 
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setError('You must be logged in')
+      if (!result.success) {
+        setError(result.error || 'Failed to add board member')
         setLoading(false)
         return
       }
 
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(email)) {
-        setError('Please enter a valid email address')
-        setLoading(false)
-        return
-      }
-
-      // Check if user with this email exists in profiles
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .single()
-
-      if (!existingProfile) {
-        setError('No user found with this email address. They need to sign up first.')
-        setLoading(false)
-        return
-      }
-
-      // Check if this user is already a member
-      const { data: existingMember } = await supabase
-        .from('company_members')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('user_id', existingProfile.id)
-        .single()
-
-      if (existingMember) {
-        setError('This user is already a member of this company')
-        setLoading(false)
-        return
-      }
-
-      // Check if user is trying to add themselves
-      if (existingProfile.id === user.id) {
-        setError('You cannot add yourself as a board member')
-        setLoading(false)
-        return
-      }
-
-      // Add the board member
-      const { error: insertError } = await supabase
-        .from('company_members')
-        .insert({
-          company_id: companyId,
-          user_id: existingProfile.id,
-          role: 'board_member',
-          invited_by: user.id,
-          status: 'active'
-        })
-
-      if (insertError) {
-        console.error('Error adding board member:', insertError)
-        setError('Failed to add board member. Please try again.')
-        setLoading(false)
-        return
-      }
-
-      setSuccess('Board member added successfully!')
+      setSuccess(result.message || 'Board member added successfully!')
       setEmail('')
       
       // Call onSuccess callback if provided

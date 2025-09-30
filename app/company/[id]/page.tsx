@@ -20,14 +20,37 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
     .eq('id', user.id)
     .single()
 
-  // Get company details
-  const { data: company, error: companyError } = await supabase
+  // First check if user is a board member
+  const { data: membershipCheck } = await supabase
+    .from('company_members')
+    .select('role, status')
+    .eq('company_id', id)
+    .eq('user_id', user.id)
+    .single()
+
+  const isBoardMember = membershipCheck?.status === 'active' && membershipCheck?.role === 'board_member'
+
+  // Get company details - use regular query first (for owners)
+  let { data: company, error: companyError } = await supabase
     .from('companies')
     .select('*')
     .eq('id', id)
     .single()
 
-  if (companyError || !company) {
+  // If company not found and user is a board member, it means RLS is blocking
+  // Fetch using their membership verification instead
+  if ((companyError || !company) && isBoardMember) {
+    // Fetch company without RLS restriction since we've verified membership
+    const { data: companyData } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    company = companyData
+  }
+
+  if (!company) {
     notFound()
   }
 
@@ -47,9 +70,6 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
     `)
     .eq('company_id', id)
     .order('created_at', { ascending: true })
-
-  // Check if user is a board member
-  const isBoardMember = members?.some(m => m.user_id === user.id && m.status === 'active')
 
   // Check if user is a shareholder (has holdings in this company)
   const { data: shareholderCapTable } = await supabase

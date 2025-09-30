@@ -12,24 +12,10 @@ export default async function CapTablePage({ params }: { params: { id: string } 
     redirect('/')
   }
 
-  // Get company details
-  const { data: company, error: companyError } = await supabase
-    .from('companies')
-    .select('*')
-    .eq('id', id)
-    .single()
-
-  if (companyError || !company) {
-    redirect('/dashboard')
-  }
-
-  // Check if user is owner
-  const isOwner = company.owner_id === user.id
-
-  // Check if user is board member
+  // First check if user is board member
   const { data: membership } = await supabase
     .from('company_members')
-    .select('*')
+    .select('role, status')
     .eq('company_id', id)
     .eq('user_id', user.id)
     .eq('role', 'board_member')
@@ -37,6 +23,31 @@ export default async function CapTablePage({ params }: { params: { id: string } 
     .single()
 
   const isBoardMember = !!membership
+
+  // Get company details - try regular query first (for owners)
+  let { data: company, error: companyError } = await supabase
+    .from('companies')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  // If company not found and user is a board member, fetch anyway since we've verified membership
+  if ((companyError || !company) && isBoardMember) {
+    const { data: companyData } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    company = companyData
+  }
+
+  if (!company) {
+    redirect('/dashboard')
+  }
+
+  // Check if user is owner
+  const isOwner = company.owner_id === user.id
 
   // If user has no access, redirect
   if (!isOwner && !isBoardMember) {
