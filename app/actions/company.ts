@@ -2,6 +2,135 @@
 
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
+export async function convertInstrument(
+  instrumentId: string,
+  roundId: string,
+  conversionDetails: {
+    shares: number
+    pricePerShare: number
+    equityType: 'common_stock' | 'preferred_stock'
+  }
+) {
+  try {
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      return { success: false, error: 'You must be logged in' }
+    }
+
+    // Get the instrument
+    const { data: instrument, error: instrumentError } = await supabase
+      .from('convertible_instruments')
+      .select('*, company_id')
+      .eq('id', instrumentId)
+      .single()
+
+    if (instrumentError || !instrument) {
+      return { success: false, error: 'Instrument not found' }
+    }
+
+    // Check if current user is the company owner
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('owner_id')
+      .eq('id', instrument.company_id)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    if (company.owner_id !== user.id) {
+      return { success: false, error: 'Only the company owner can convert instruments' }
+    }
+
+    // Check if instrument is already converted
+    if (instrument.status !== 'outstanding') {
+      return { success: false, error: 'This instrument has already been converted or is not outstanding' }
+    }
+
+    // Get the fundraising round
+    const { data: round, error: roundError } = await supabase
+      .from('fundraising_rounds')
+      .select('*')
+      .eq('id', roundId)
+      .single()
+
+    if (roundError || !round) {
+      return { success: false, error: 'Fundraising round not found' }
+    }
+
+    // Start transaction: Update instrument status
+    const { error: updateError } = await supabase
+      .from('convertible_instruments')
+      .update({
+        status: 'converted',
+        conversion_trigger: `Converted to ${conversionDetails.equityType} in ${round.round_name}`,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', instrumentId)
+
+    if (updateError) {
+      console.error('Error updating instrument:', updateError)
+      return { success: false, error: 'Failed to update instrument status' }
+    }
+
+    // Create cap table entry for the converted equity
+    const { error: capTableError } = await supabase
+      .from('cap_table_entries')
+      .insert({
+        company_id: instrument.company_id,
+        holder_name: instrument.investor_name,
+        holder_email: instrument.investor_email,
+        holder_type: 'investor',
+        equity_type: conversionDetails.equityType,
+        shares: conversionDetails.shares,
+        price_per_share: conversionDetails.pricePerShare,
+        total_value: conversionDetails.shares * conversionDetails.pricePerShare,
+        issue_date: round.close_date,
+        notes: `Converted from ${instrument.instrument_type} (Principal: $${instrument.principal_amount})`,
+        created_by: user.id
+      })
+
+    if (capTableError) {
+      console.error('Error creating cap table entry:', capTableError)
+      return { success: false, error: 'Failed to create cap table entry' }
+    }
+
+    // Create equity transaction record
+    const { error: transactionError } = await supabase
+      .from('equity_transactions')
+      .insert({
+        company_id: instrument.company_id,
+        transaction_type: 'conversion',
+        transaction_date: round.close_date,
+        from_holder: `${instrument.instrument_type} - ${instrument.investor_name}`,
+        to_holder: instrument.investor_name,
+        equity_type: conversionDetails.equityType,
+        shares: conversionDetails.shares,
+        price_per_share: conversionDetails.pricePerShare,
+        total_amount: conversionDetails.shares * conversionDetails.pricePerShare,
+        notes: `Converted ${instrument.instrument_type} (ID: ${instrumentId}) in ${round.round_name}`,
+        created_by: user.id
+      })
+
+    if (transactionError) {
+      console.error('Error creating transaction:', transactionError)
+      // Don't fail the entire operation if transaction logging fails
+    }
+
+    return { 
+      success: true, 
+      message: 'Instrument converted successfully! The equity has been added to the cap table.' 
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
 export async function addBoardMember(companyId: string, email: string) {
   try {
     const supabase = await createClient()

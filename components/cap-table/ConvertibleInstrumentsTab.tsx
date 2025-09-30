@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Database } from '@/lib/types/database.types'
 import { createClient } from '@/lib/supabase/client'
+import { convertInstrument } from '@/app/actions/company'
 
 type Company = Database['public']['Tables']['companies']['Row']
 type ConvertibleInstrument = Database['public']['Tables']['convertible_instruments']['Row']
+type FundraisingRound = Database['public']['Tables']['fundraising_rounds']['Row']
 
 interface ConvertibleInstrumentsTabProps {
   company: Company
@@ -19,7 +21,11 @@ export default function ConvertibleInstrumentsTab({
   convertibleInstruments
 }: ConvertibleInstrumentsTabProps) {
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showConvertModal, setShowConvertModal] = useState(false)
+  const [selectedInstrument, setSelectedInstrument] = useState<ConvertibleInstrument | null>(null)
+  const [fundraisingRounds, setFundraisingRounds] = useState<FundraisingRound[]>([])
   const [loading, setLoading] = useState(false)
+  const [convertLoading, setConvertLoading] = useState(false)
   const [formData, setFormData] = useState({
     investor_name: '',
     investor_email: '',
@@ -32,6 +38,23 @@ export default function ConvertibleInstrumentsTab({
     maturity_date: '',
     notes: ''
   })
+  const [convertFormData, setConvertFormData] = useState({
+    round_id: '',
+    equity_type: 'preferred_stock' as 'common_stock' | 'preferred_stock',
+    conversion_price: '',
+    shares: ''
+  })
+
+  // Auto-calculate shares when conversion price changes
+  useEffect(() => {
+    if (selectedInstrument && convertFormData.conversion_price) {
+      const price = parseFloat(convertFormData.conversion_price)
+      if (price > 0) {
+        const calculatedShares = (selectedInstrument.principal_amount / price).toFixed(4)
+        setConvertFormData(prev => ({ ...prev, shares: calculatedShares }))
+      }
+    }
+  }, [selectedInstrument, convertFormData.conversion_price])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,12 +107,12 @@ export default function ConvertibleInstrumentsTab({
     }
   }
 
-  const formatCurrency = (num: number) => {
+  const formatCurrency = (num: number, decimals: number = 0) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
     }).format(num)
   }
 
@@ -149,6 +172,11 @@ export default function ConvertibleInstrumentsTab({
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Issue Date
                 </th>
+                {isOwner && (
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -206,6 +234,31 @@ export default function ConvertibleInstrumentsTab({
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(inst.issue_date).toLocaleDateString()}
                     </td>
+                    {isOwner && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        {inst.status === 'outstanding' ? (
+                          <button
+                            onClick={async () => {
+                              setSelectedInstrument(inst)
+                              // Fetch fundraising rounds
+                              const supabase = createClient()
+                              const { data } = await supabase
+                                .from('fundraising_rounds')
+                                .select('*')
+                                .eq('company_id', company.id)
+                                .order('close_date', { ascending: false })
+                              setFundraisingRounds(data || [])
+                              setShowConvertModal(true)
+                            }}
+                            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                          >
+                            Convert
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -349,6 +402,205 @@ export default function ConvertibleInstrumentsTab({
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {loading ? 'Adding...' : 'Add Instrument'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Convert Instrument Modal */}
+      {showConvertModal && selectedInstrument && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Convert Instrument</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Convert {selectedInstrument.instrument_type} from {selectedInstrument.investor_name}
+              </p>
+            </div>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setConvertLoading(true)
+
+              try {
+                const result = await convertInstrument(
+                  selectedInstrument.id,
+                  convertFormData.round_id,
+                  {
+                    shares: parseFloat(convertFormData.shares),
+                    pricePerShare: parseFloat(convertFormData.conversion_price),
+                    equityType: convertFormData.equity_type
+                  }
+                )
+
+                if (result.success) {
+                  alert(result.message)
+                  setShowConvertModal(false)
+                  setSelectedInstrument(null)
+                  setConvertFormData({
+                    round_id: '',
+                    equity_type: 'preferred_stock',
+                    conversion_price: '',
+                    shares: ''
+                  })
+                  window.location.reload()
+                } else {
+                  alert(result.error)
+                }
+              } catch (error) {
+                console.error('Error converting instrument:', error)
+                alert('Failed to convert instrument. Please try again.')
+              } finally {
+                setConvertLoading(false)
+              }
+            }} className="p-6 space-y-4">
+              {/* Instrument Details */}
+              <div className="bg-blue-50 p-4 rounded-lg space-y-2">
+                <h4 className="font-medium text-gray-900">Instrument Details</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-gray-600">Principal:</span> {formatCurrency(selectedInstrument.principal_amount)}</div>
+                  <div><span className="text-gray-600">Discount:</span> {selectedInstrument.discount_rate ? `${selectedInstrument.discount_rate}%` : 'N/A'}</div>
+                  <div><span className="text-gray-600">Valuation Cap:</span> {selectedInstrument.valuation_cap ? formatCurrency(selectedInstrument.valuation_cap) : 'N/A'}</div>
+                  <div><span className="text-gray-600">Type:</span> {selectedInstrument.instrument_type}</div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Triggering Fundraising Round *</label>
+                  {fundraisingRounds.length === 0 ? (
+                    <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                      No fundraising rounds available. Please create a fundraising round first to convert this instrument.
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={convertFormData.round_id}
+                      onChange={(e) => {
+                        const round = fundraisingRounds.find(r => r.id === e.target.value)
+                        setConvertFormData({ 
+                          ...convertFormData, 
+                          round_id: e.target.value,
+                          conversion_price: round?.price_per_share?.toString() || ''
+                        })
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select a round...</option>
+                      {fundraisingRounds.map((round) => (
+                        <option key={round.id} value={round.id}>
+                          {round.round_name} - {new Date(round.close_date).toLocaleDateString()}
+                          {round.price_per_share && ` (${formatCurrency(round.price_per_share, 2)}/share)`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Equity Type *</label>
+                  <select
+                    required
+                    value={convertFormData.equity_type}
+                    onChange={(e) => setConvertFormData({ ...convertFormData, equity_type: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="preferred_stock">Preferred Stock</option>
+                    <option value="common_stock">Common Stock</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Conversion Price per Share *</label>
+                  <input
+                    type="number"
+                    required
+                    step="0.0001"
+                    value={convertFormData.conversion_price}
+                    onChange={(e) => {
+                      const price = parseFloat(e.target.value)
+                      const shares = price > 0 ? (selectedInstrument.principal_amount / price).toFixed(4) : ''
+                      setConvertFormData({ 
+                        ...convertFormData, 
+                        conversion_price: e.target.value,
+                        shares: shares
+                      })
+                    }}
+                    placeholder="e.g., 1.50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    The price at which the instrument converts to equity
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Resulting Shares *</label>
+                  <input
+                    type="number"
+                    required
+                    step="0.0001"
+                    value={convertFormData.shares}
+                    onChange={(e) => setConvertFormData({ ...convertFormData, shares: e.target.value })}
+                    placeholder="Calculated automatically"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Principal ({formatCurrency(selectedInstrument.principal_amount)}) ÷ Conversion Price = Shares
+                  </p>
+                </div>
+
+                {/* Summary */}
+                {convertFormData.shares && convertFormData.conversion_price && (
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">Conversion Summary</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Principal Amount:</span>
+                        <span className="font-medium">{formatCurrency(selectedInstrument.principal_amount)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Conversion Price:</span>
+                        <span className="font-medium">{formatCurrency(parseFloat(convertFormData.conversion_price), 2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Shares to Issue:</span>
+                        <span className="font-medium">{parseFloat(convertFormData.shares).toLocaleString()} shares</span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t border-green-200">
+                        <span className="text-gray-600">Total Value:</span>
+                        <span className="font-medium">{formatCurrency(parseFloat(convertFormData.shares) * parseFloat(convertFormData.conversion_price))}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowConvertModal(false)
+                    setSelectedInstrument(null)
+                    setConvertFormData({
+                      round_id: '',
+                      equity_type: 'preferred_stock',
+                      conversion_price: '',
+                      shares: ''
+                    })
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={convertLoading || fundraisingRounds.length === 0}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {convertLoading ? 'Converting...' : 'Convert to Equity'}
                 </button>
               </div>
             </form>
