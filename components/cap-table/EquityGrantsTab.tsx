@@ -88,18 +88,25 @@ export default function EquityGrantsTab({
   }
 
   const calculateVested = (grant: EquityGrant) => {
-    if (!grant.vesting_start_date) return 0
+    if (!grant.vesting_start_date) return grant.vested_shares || 0
     
     const startDate = new Date(grant.vesting_start_date)
     const cliffDate = new Date(startDate)
     cliffDate.setMonth(cliffDate.getMonth() + grant.cliff_months)
     const now = new Date()
     
+    // If before cliff, nothing vests
     if (now < cliffDate) return 0
     
-    const monthsElapsed = Math.floor((now.getTime() - startDate.getTime()) / (30 * 24 * 60 * 60 * 1000))
+    // Calculate months elapsed more accurately
+    const yearsDiff = now.getFullYear() - startDate.getFullYear()
+    const monthsDiff = now.getMonth() - startDate.getMonth()
+    const monthsElapsed = yearsDiff * 12 + monthsDiff
+    
+    // Calculate vesting progress (cap at 100%)
     const vestingProgress = Math.min(monthsElapsed / grant.vesting_duration_months, 1)
     
+    // Return floored value
     return Math.floor(grant.total_shares * vestingProgress)
   }
 
@@ -204,7 +211,7 @@ export default function EquityGrantsTab({
                       {formatNumber(grant.total_shares)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {formatNumber(grant.vested_shares)}
+                      {formatNumber(calculateVested(grant))}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                       {formatNumber(grant.exercised_shares)}

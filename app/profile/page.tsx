@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ProfileForm from '@/components/profile/ProfileForm'
 import Link from 'next/link'
+import { signOut } from '@/app/actions/auth'
 
 export default async function ProfilePage() {
   const supabase = await createClient()
@@ -78,7 +79,7 @@ export default async function ProfilePage() {
             </div>
 
             <div className="pt-4 border-t border-gray-200">
-              <form action="/api/auth/signout" method="post">
+              <form action={signOut}>
                 <button
                   type="submit"
                   className="text-red-600 hover:text-red-700 font-medium transition-colors"

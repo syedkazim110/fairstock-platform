@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import CreateCompanyModal from '@/components/company/CreateCompanyModal'
 import CompanyList from '@/components/company/CompanyList'
 import MyHoldings from '@/components/dashboard/MyHoldings'
+import { signOut } from '@/app/actions/auth'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -137,7 +138,7 @@ export default async function DashboardPage() {
               >
                 Profile
               </a>
-              <form action="/api/auth/signout" method="post">
+              <form action={signOut}>
                 <button
                   type="submit"
                   className="text-gray-600 hover:text-gray-900 transition-colors"
