@@ -93,23 +93,24 @@ export interface Database {
           created_at?: string
         }
       }
-      cap_table_entries: {
-        Row: {
-          id: string
-          company_id: string
-          holder_name: string
-          holder_email: string | null
-          holder_type: 'founder' | 'employee' | 'investor' | 'advisor' | 'other'
-          equity_type: 'common_stock' | 'preferred_stock' | 'safe' | 'convertible_note' | 'option'
-          shares: number
-          price_per_share: number | null
-          total_value: number | null
-          issue_date: string | null
-          notes: string | null
-          created_at: string
-          updated_at: string
-          created_by: string
-        }
+    cap_table_entries: {
+      Row: {
+        id: string
+        company_id: string
+        holder_name: string
+        holder_email: string | null
+        holder_type: 'founder' | 'employee' | 'investor' | 'advisor' | 'other'
+        equity_type: 'common_stock' | 'preferred_stock' | 'safe' | 'convertible_note' | 'option'
+        shares: number
+        price_per_share: number | null
+        total_value: number | null
+        issue_date: string | null
+        notes: string | null
+        created_at: string
+        updated_at: string
+        created_by: string
+        user_id: string | null
+      }
         Insert: {
           id?: string
           company_id: string
@@ -143,29 +144,30 @@ export interface Database {
           created_by?: string
         }
       }
-      equity_grants: {
-        Row: {
-          id: string
-          company_id: string
-          recipient_name: string
-          recipient_email: string | null
-          grant_date: string
-          total_shares: number
-          vested_shares: number
-          exercised_shares: number
-          cancelled_shares: number
-          vesting_start_date: string | null
-          vesting_duration_months: number
-          cliff_months: number
-          exercise_price: number | null
-          expiration_date: string | null
-          grant_type: 'ISO' | 'NSO' | 'RSU' | 'RSA'
-          status: 'active' | 'terminated' | 'fully_exercised' | 'expired'
-          notes: string | null
-          created_at: string
-          updated_at: string
-          created_by: string
-        }
+    equity_grants: {
+      Row: {
+        id: string
+        company_id: string
+        recipient_name: string
+        recipient_email: string | null
+        grant_date: string
+        total_shares: number
+        vested_shares: number
+        exercised_shares: number
+        cancelled_shares: number
+        vesting_start_date: string | null
+        vesting_duration_months: number
+        cliff_months: number
+        exercise_price: number | null
+        expiration_date: string | null
+        grant_type: 'ISO' | 'NSO' | 'RSU' | 'RSA'
+        status: 'active' | 'terminated' | 'fully_exercised' | 'expired'
+        notes: string | null
+        created_at: string
+        updated_at: string
+        created_by: string
+        user_id: string | null
+      }
         Insert: {
           id?: string
           company_id: string
@@ -261,26 +263,27 @@ export interface Database {
           created_by?: string
         }
       }
-      convertible_instruments: {
-        Row: {
-          id: string
-          company_id: string
-          investor_name: string
-          investor_email: string | null
-          instrument_type: 'SAFE' | 'convertible_note'
-          principal_amount: number
-          discount_rate: number | null
-          valuation_cap: number | null
-          interest_rate: number | null
-          issue_date: string
-          maturity_date: string | null
-          conversion_trigger: string | null
-          status: 'outstanding' | 'converted' | 'repaid' | 'expired'
-          notes: string | null
-          created_at: string
-          updated_at: string
-          created_by: string
-        }
+    convertible_instruments: {
+      Row: {
+        id: string
+        company_id: string
+        investor_name: string
+        investor_email: string | null
+        instrument_type: 'SAFE' | 'convertible_note'
+        principal_amount: number
+        discount_rate: number | null
+        valuation_cap: number | null
+        interest_rate: number | null
+        issue_date: string
+        maturity_date: string | null
+        conversion_trigger: string | null
+        status: 'outstanding' | 'converted' | 'repaid' | 'expired'
+        notes: string | null
+        created_at: string
+        updated_at: string
+        created_by: string
+        user_id: string | null
+      }
         Insert: {
           id?: string
           company_id: string

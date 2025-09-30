@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import CreateCompanyModal from '@/components/company/CreateCompanyModal'
 import CompanyList from '@/components/company/CompanyList'
+import MyHoldings from '@/components/dashboard/MyHoldings'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -38,6 +39,84 @@ export default async function DashboardPage() {
     .eq('status', 'active')
 
   const memberCompanies = membershipData?.map((m: any) => m.companies) || []
+
+  // Get user's holdings (cap table entries) - without companies relationship to avoid RLS recursion
+  const { data: capTableHoldings } = await supabase
+    .from('cap_table_entries')
+    .select('*')
+    .or(`user_id.eq.${user.id},holder_email.eq.${profile?.email}`)
+
+  // Get user's equity grants
+  const { data: equityGrantHoldings } = await supabase
+    .from('equity_grants')
+    .select('*')
+    .or(`user_id.eq.${user.id},recipient_email.eq.${profile?.email}`)
+
+  // Get user's convertible instruments
+  const { data: convertibleHoldings } = await supabase
+    .from('convertible_instruments')
+    .select('*')
+    .or(`user_id.eq.${user.id},investor_email.eq.${profile?.email}`)
+
+  // Get unique company IDs from all holdings
+  const companyIds = new Set([
+    ...(capTableHoldings?.map(h => h.company_id) || []),
+    ...(equityGrantHoldings?.map(h => h.company_id) || []),
+    ...(convertibleHoldings?.map(h => h.company_id) || [])
+  ])
+
+  // Fetch companies separately using service role to bypass RLS
+  const { data: holdingCompanies } = await supabase
+    .from('companies')
+    .select('*')
+    .in('id', Array.from(companyIds))
+
+  // Create a map for quick company lookup
+  const companiesMap: Record<string, any> = {}
+  holdingCompanies?.forEach(company => {
+    companiesMap[company.id] = company
+  })
+
+  // Get total shares for each company to calculate ownership percentage
+  const uniqueCompanyIds = new Set([
+    ...(capTableHoldings?.map((h: any) => h.company_id) || []),
+    ...(equityGrantHoldings?.map((h: any) => h.company_id) || []),
+    ...(convertibleHoldings?.map((h: any) => h.company_id) || [])
+  ])
+
+  const companyTotalShares: Record<string, number> = {}
+  for (const companyId of uniqueCompanyIds) {
+    const { data: allEntries } = await supabase
+      .from('cap_table_entries')
+      .select('shares')
+      .eq('company_id', companyId)
+      .neq('equity_type', 'option')
+    
+    const total = allEntries?.reduce((sum: number, entry: any) => sum + Number(entry.shares), 0) || 0
+    companyTotalShares[companyId] = total
+  }
+
+  // Combine all holdings with company data from the map
+  const holdings = [
+    ...(capTableHoldings?.map((h: any) => ({
+      capTableEntry: h,
+      company: companiesMap[h.company_id],
+      totalShares: companyTotalShares[h.company_id]
+    })) || []),
+    ...(equityGrantHoldings?.map((h: any) => ({
+      equityGrant: h,
+      company: companiesMap[h.company_id]
+    })) || []),
+    ...(convertibleHoldings?.map((h: any) => ({
+      convertibleInstrument: h,
+      company: companiesMap[h.company_id]
+    })) || [])
+  ]
+
+  // Filter out holdings for companies the user owns (they see those in "My Companies" section)
+  const shareholderHoldings = holdings.filter((h: any) => 
+    h.company && h.company.owner_id !== user.id
+  )
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -111,6 +190,19 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* My Holdings Section */}
+        {shareholderHoldings.length > 0 && (
+          <div className="mb-12">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">My Holdings</h2>
+              <p className="text-gray-600 text-sm mt-1">
+                Your equity holdings in companies
+              </p>
+            </div>
+            <MyHoldings holdings={shareholderHoldings} />
+          </div>
+        )}
 
         {/* Board Memberships Section */}
         <div>

@@ -4,6 +4,7 @@ import CapTableDashboard from '@/components/cap-table/CapTableDashboard'
 
 export default async function CapTablePage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
+  const { id } = await params
   
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -15,7 +16,7 @@ export default async function CapTablePage({ params }: { params: { id: string } 
   const { data: company, error: companyError } = await supabase
     .from('companies')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (companyError || !company) {
@@ -29,7 +30,7 @@ export default async function CapTablePage({ params }: { params: { id: string } 
   const { data: membership } = await supabase
     .from('company_members')
     .select('*')
-    .eq('company_id', params.id)
+    .eq('company_id', id)
     .eq('user_id', user.id)
     .eq('role', 'board_member')
     .eq('status', 'active')
@@ -46,42 +47,42 @@ export default async function CapTablePage({ params }: { params: { id: string } 
   const { data: capTableEntries } = await supabase
     .from('cap_table_entries')
     .select('*')
-    .eq('company_id', params.id)
+    .eq('company_id', id)
     .order('created_at', { ascending: false })
 
   // Get equity grants
   const { data: equityGrants } = await supabase
     .from('equity_grants')
     .select('*')
-    .eq('company_id', params.id)
+    .eq('company_id', id)
     .order('grant_date', { ascending: false })
 
   // Get transactions
   const { data: transactions } = await supabase
     .from('equity_transactions')
     .select('*')
-    .eq('company_id', params.id)
+    .eq('company_id', id)
     .order('transaction_date', { ascending: false })
 
   // Get convertible instruments
   const { data: convertibleInstruments } = await supabase
     .from('convertible_instruments')
     .select('*')
-    .eq('company_id', params.id)
+    .eq('company_id', id)
     .order('issue_date', { ascending: false })
 
   // Get fundraising rounds
   const { data: fundraisingRounds } = await supabase
     .from('fundraising_rounds')
     .select('*')
-    .eq('company_id', params.id)
+    .eq('company_id', id)
     .order('close_date', { ascending: false })
 
   // Get option pools
   const { data: optionPools } = await supabase
     .from('option_pools')
     .select('*')
-    .eq('company_id', params.id)
+    .eq('company_id', id)
     .order('created_date', { ascending: false })
 
   return (

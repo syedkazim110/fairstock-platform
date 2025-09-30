@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import ShareholderView from '@/components/company/ShareholderView'
 
 export default async function CompanyDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -11,6 +12,13 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
   if (!user) {
     redirect('/')
   }
+
+  // Get user profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
 
   // Get company details
   const { data: company, error: companyError } = await supabase
@@ -40,13 +48,63 @@ export default async function CompanyDetailPage({ params }: { params: { id: stri
     .eq('company_id', id)
     .order('created_at', { ascending: true })
 
-  // Check if current user has access to this company
-  const hasAccess = isOwner || members?.some(m => m.user_id === user.id && m.status === 'active')
+  // Check if user is a board member
+  const isBoardMember = members?.some(m => m.user_id === user.id && m.status === 'active')
+
+  // Check if user is a shareholder (has holdings in this company)
+  const { data: shareholderCapTable } = await supabase
+    .from('cap_table_entries')
+    .select('*')
+    .eq('company_id', id)
+    .or(`user_id.eq.${user.id},holder_email.eq.${profile?.email}`)
+
+  const { data: shareholderGrants } = await supabase
+    .from('equity_grants')
+    .select('*')
+    .eq('company_id', id)
+    .or(`user_id.eq.${user.id},recipient_email.eq.${profile?.email}`)
+
+  const { data: shareholderInstruments } = await supabase
+    .from('convertible_instruments')
+    .select('*')
+    .eq('company_id', id)
+    .or(`user_id.eq.${user.id},investor_email.eq.${profile?.email}`)
+
+  const isShareholder = 
+    (shareholderCapTable && shareholderCapTable.length > 0) ||
+    (shareholderGrants && shareholderGrants.length > 0) ||
+    (shareholderInstruments && shareholderInstruments.length > 0)
+
+  // Check if current user has any access to this company
+  const hasAccess = isOwner || isBoardMember || isShareholder
 
   if (!hasAccess) {
     notFound()
   }
 
+  // If user is only a shareholder (not owner or board member), show shareholder view
+  if (!isOwner && !isBoardMember && isShareholder) {
+    // Get total shares for ownership percentage calculation
+    const { data: allEntries } = await supabase
+      .from('cap_table_entries')
+      .select('shares')
+      .eq('company_id', id)
+      .neq('equity_type', 'option')
+    
+    const totalShares = allEntries?.reduce((sum: number, entry: any) => sum + Number(entry.shares), 0) || 0
+
+    return (
+      <ShareholderView
+        company={company}
+        capTableEntries={shareholderCapTable || []}
+        equityGrants={shareholderGrants || []}
+        convertibleInstruments={shareholderInstruments || []}
+        totalShares={totalShares}
+      />
+    )
+  }
+
+  // Otherwise show owner/board member view
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
