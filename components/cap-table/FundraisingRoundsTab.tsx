@@ -23,15 +23,22 @@ export default function FundraisingRoundsTab({
   const [formData, setFormData] = useState({
     round_name: '',
     round_type: 'seed' as const,
+    security_type: 'common_stock' as const,
     close_date: '',
     valuation_pre_money: '',
     valuation_post_money: '',
     amount_raised: '',
+    minimum_amount: '',
+    maximum_amount: '',
     shares_issued: '',
     price_per_share: '',
     lead_investor: '',
-    notes: ''
+    notes: '',
+    create_option_pool: false,
+    option_pool_shares: '',
+    target_ownership_percentage: ''
   })
+  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,16 +50,77 @@ export default function FundraisingRoundsTab({
       
       if (!user) throw new Error('Not authenticated')
 
+      // Validate min/max amounts
+      const minAmount = formData.minimum_amount ? parseFloat(formData.minimum_amount) : null
+      const maxAmount = formData.maximum_amount ? parseFloat(formData.maximum_amount) : null
+      const targetAmount = parseFloat(formData.amount_raised)
+
+      if (minAmount && minAmount > targetAmount) {
+        throw new Error('Minimum amount cannot be greater than target amount')
+      }
+      if (maxAmount && maxAmount < targetAmount) {
+        throw new Error('Maximum amount cannot be less than target amount')
+      }
+      if (minAmount && maxAmount && minAmount > maxAmount) {
+        throw new Error('Minimum amount cannot be greater than maximum amount')
+      }
+
+      // Calculate price per share based on company's share calculation method
+      // We'll need to fetch cap table data to calculate this
+      const { data: capTableEntries } = await supabase
+        .from('cap_table_entries')
+        .select('shares, equity_type')
+        .eq('company_id', company.id)
+
+      const { data: equityGrants } = await supabase
+        .from('equity_grants')
+        .select('total_shares')
+        .eq('company_id', company.id)
+
+      const { data: optionPools } = await supabase
+        .from('option_pools')
+        .select('total_shares')
+        .eq('company_id', company.id)
+
+      // Calculate share count based on method
+      let shareCount = 0
+      const issuedShares = capTableEntries
+        ?.filter(entry => entry.equity_type !== 'option')
+        .reduce((sum, entry) => sum + Number(entry.shares), 0) || 0
+
+      if (company.share_calculation_method === 'issued_outstanding') {
+        shareCount = issuedShares
+      } else {
+        // Fully diluted: issued + all options
+        const totalOptions = equityGrants?.reduce((sum, grant) => sum + Number(grant.total_shares), 0) || 0
+        const optionPoolShares = optionPools?.reduce((sum, pool) => sum + Number(pool.total_shares), 0) || 0
+        shareCount = issuedShares + totalOptions + optionPoolShares
+        
+        // Add option pool increase if specified
+        if (formData.create_option_pool && formData.option_pool_shares) {
+          shareCount += parseFloat(formData.option_pool_shares)
+        }
+      }
+
+      const preMoney = formData.valuation_pre_money ? parseFloat(formData.valuation_pre_money) : 0
+      const calculatedPricePerShare = shareCount > 0 ? preMoney / shareCount : null
+
       const { error } = await supabase
         .from('fundraising_rounds')
         .insert({
           company_id: company.id,
           round_name: formData.round_name,
           round_type: formData.round_type,
+          security_type: formData.security_type,
           close_date: formData.close_date,
-          valuation_pre_money: formData.valuation_pre_money ? parseFloat(formData.valuation_pre_money) : null,
+          valuation_pre_money: preMoney || null,
           valuation_post_money: formData.valuation_post_money ? parseFloat(formData.valuation_post_money) : null,
-          amount_raised: parseFloat(formData.amount_raised),
+          amount_raised: targetAmount,
+          minimum_amount: minAmount,
+          maximum_amount: maxAmount,
+          option_pool_increase: formData.create_option_pool && formData.option_pool_shares ? parseFloat(formData.option_pool_shares) : 0,
+          target_ownership_percentage: formData.target_ownership_percentage ? parseFloat(formData.target_ownership_percentage) : null,
+          calculated_price_per_share: calculatedPricePerShare,
           shares_issued: formData.shares_issued ? parseFloat(formData.shares_issued) : null,
           price_per_share: formData.price_per_share ? parseFloat(formData.price_per_share) : null,
           lead_investor: formData.lead_investor || null,
@@ -62,17 +130,40 @@ export default function FundraisingRoundsTab({
 
       if (error) throw error
 
+      // If option pool creation was requested, create the option pool
+      if (formData.create_option_pool && formData.option_pool_shares) {
+        const poolShares = parseFloat(formData.option_pool_shares)
+        await supabase
+          .from('option_pools')
+          .insert({
+            company_id: company.id,
+            pool_name: `${formData.round_name} Option Pool`,
+            total_shares: poolShares,
+            granted_shares: 0,
+            available_shares: poolShares,
+            created_date: formData.close_date,
+            notes: `Created as part of ${formData.round_name}`,
+            created_by: user.id
+          })
+      }
+
       setFormData({
         round_name: '',
         round_type: 'seed',
+        security_type: 'common_stock',
         close_date: '',
         valuation_pre_money: '',
         valuation_post_money: '',
         amount_raised: '',
+        minimum_amount: '',
+        maximum_amount: '',
         shares_issued: '',
         price_per_share: '',
         lead_investor: '',
-        notes: ''
+        notes: '',
+        create_option_pool: false,
+        option_pool_shares: '',
+        target_ownership_percentage: ''
       })
       setShowAddModal(false)
       window.location.reload()
@@ -215,128 +306,247 @@ export default function FundraisingRoundsTab({
               <h3 className="text-lg font-semibold text-gray-900">Add Fundraising Round</h3>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Round Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g., Seed Round 2024"
-                    value={formData.round_name}
-                    onChange={(e) => setFormData({ ...formData, round_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900">Basic Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Round Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g., Seed Round 2024"
+                      value={formData.round_name}
+                      onChange={(e) => setFormData({ ...formData, round_name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Round Type *</label>
+                    <select
+                      required
+                      value={formData.round_type}
+                      onChange={(e) => setFormData({ ...formData, round_type: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="seed">Seed</option>
+                      <option value="series_a">Series A</option>
+                      <option value="series_b">Series B</option>
+                      <option value="series_c">Series C</option>
+                      <option value="series_d">Series D</option>
+                      <option value="bridge">Bridge</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Security Type *</label>
+                    <select
+                      required
+                      value={formData.security_type}
+                      onChange={(e) => setFormData({ ...formData, security_type: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="common_stock">Common Stock</option>
+                      <option value="preferred_stock">Preferred Stock</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Close Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.close_date}
+                      onChange={(e) => setFormData({ ...formData, close_date: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Offering Terms */}
+              <div className="space-y-4 border-t pt-4">
+                <h4 className="font-semibold text-gray-900">Offering Terms</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Target Amount to Raise *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      step="0.01"
+                      placeholder="1000000"
+                      value={formData.amount_raised}
+                      onChange={(e) => setFormData({ ...formData, amount_raised: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pre-Money Valuation *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      step="0.01"
+                      placeholder="5000000"
+                      value={formData.valuation_pre_money}
+                      onChange={(e) => setFormData({ ...formData, valuation_pre_money: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Minimum Amount (Optional)
+                      <span className="ml-1 text-xs text-gray-500">Below which offering is abandoned</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="500000"
+                      value={formData.minimum_amount}
+                      onChange={(e) => setFormData({ ...formData, minimum_amount: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Maximum Amount (Optional)
+                      <span className="ml-1 text-xs text-gray-500">Beyond which no more funds accepted</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="1500000"
+                      value={formData.maximum_amount}
+                      onChange={(e) => setFormData({ ...formData, maximum_amount: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Option Pool */}
+              <div className="space-y-4 border-t pt-4">
+                <h4 className="font-semibold text-gray-900">Option Pool</h4>
+                <div className="space-y-3">
+                  <label className="flex items-start">
+                    <input
+                      type="checkbox"
+                      checked={formData.create_option_pool}
+                      onChange={(e) => setFormData({ ...formData, create_option_pool: e.target.checked })}
+                      className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <div className="ml-3">
+                      <div className="font-medium text-gray-900">Create option pool for employees/consultants</div>
+                      <p className="text-sm text-gray-500">
+                        Reserve shares for future employee grants as part of this financing
+                      </p>
+                    </div>
+                  </label>
+
+                  {formData.create_option_pool && (
+                    <div className="ml-7">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Number of Shares to Reserve *
+                      </label>
+                      <input
+                        type="number"
+                        required={formData.create_option_pool}
+                        step="1"
+                        placeholder="1000000"
+                        value={formData.option_pool_shares}
+                        onChange={(e) => setFormData({ ...formData, option_pool_shares: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Calculated Metrics */}
+              <div className="space-y-4 border-t pt-4">
+                <h4 className="font-semibold text-gray-900">Additional Details</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Post-Money Valuation (Optional)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="6000000"
+                      value={formData.valuation_post_money}
+                      onChange={(e) => setFormData({ ...formData, valuation_post_money: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Target Ownership % (Optional)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      placeholder="20"
+                      value={formData.target_ownership_percentage}
+                      onChange={(e) => setFormData({ ...formData, target_ownership_percentage: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Lead Investor (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Acme Ventures"
+                      value={formData.lead_investor}
+                      onChange={(e) => setFormData({ ...formData, lead_investor: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Shares Issued (Optional)</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={formData.shares_issued}
+                      onChange={(e) => setFormData({ ...formData, shares_issued: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Round Type *</label>
-                  <select
-                    required
-                    value={formData.round_type}
-                    onChange={(e) => setFormData({ ...formData, round_type: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="seed">Seed</option>
-                    <option value="series_a">Series A</option>
-                    <option value="series_b">Series B</option>
-                    <option value="series_c">Series C</option>
-                    <option value="series_d">Series D</option>
-                    <option value="bridge">Bridge</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Close Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.close_date}
-                    onChange={(e) => setFormData({ ...formData, close_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount Raised *</label>
-                  <input
-                    type="number"
-                    required
-                    step="0.01"
-                    placeholder="1000000"
-                    value={formData.amount_raised}
-                    onChange={(e) => setFormData({ ...formData, amount_raised: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pre-Money Valuation</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="5000000"
-                    value={formData.valuation_pre_money}
-                    onChange={(e) => setFormData({ ...formData, valuation_pre_money: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Post-Money Valuation</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="6000000"
-                    value={formData.valuation_post_money}
-                    onChange={(e) => setFormData({ ...formData, valuation_post_money: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Shares Issued</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={formData.shares_issued}
-                    onChange={(e) => setFormData({ ...formData, shares_issued: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price per Share</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={formData.price_per_share}
-                    onChange={(e) => setFormData({ ...formData, price_per_share: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Lead Investor</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Acme Ventures"
-                    value={formData.lead_investor}
-                    onChange={(e) => setFormData({ ...formData, lead_investor: e.target.value })}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+              {/* Calculation Info */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">💡 Price Calculation</h4>
+                <p className="text-sm text-blue-800">
+                  The price per share will be automatically calculated based on your company's share calculation method 
+                  (currently: <strong>{company.share_calculation_method.replace('_', ' ')}</strong>) and the pre-money valuation you entered.
+                </p>
+                <p className="text-xs text-blue-700 mt-2">
+                  You can change the calculation method in Company Settings if needed.
+                </p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">

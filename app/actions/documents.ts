@@ -206,11 +206,17 @@ export async function getDocumentUrl(filePath: string) {
     return { error: 'Not authenticated' }
   }
 
-  const { data } = supabase.storage
+  // For private buckets, we need to create a signed URL with expiration
+  const { data, error } = await supabase.storage
     .from('documents')
-    .getPublicUrl(filePath)
+    .createSignedUrl(filePath, 3600) // URL expires in 1 hour (3600 seconds)
 
-  return { url: data.publicUrl }
+  if (error) {
+    console.error('Error creating signed URL:', error)
+    return { error: 'Failed to generate document URL' }
+  }
+
+  return { url: data.signedUrl }
 }
 
 export async function signDocument(signatureId: string, signatureData: string) {

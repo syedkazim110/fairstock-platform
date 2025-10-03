@@ -38,6 +38,8 @@ export interface Database {
           name: string
           description: string | null
           owner_id: string
+          authorized_shares: number
+          share_calculation_method: 'issued_outstanding' | 'fully_diluted'
           created_at: string
           updated_at: string
         }
@@ -46,6 +48,8 @@ export interface Database {
           name: string
           description?: string | null
           owner_id: string
+          authorized_shares?: number
+          share_calculation_method?: 'issued_outstanding' | 'fully_diluted'
           created_at?: string
           updated_at?: string
         }
@@ -54,6 +58,8 @@ export interface Database {
           name?: string
           description?: string | null
           owner_id?: string
+          authorized_shares?: number
+          share_calculation_method?: 'issued_outstanding' | 'fully_diluted'
           created_at?: string
           updated_at?: string
         }
@@ -460,6 +466,12 @@ export interface Database {
           price_per_share: number | null
           lead_investor: string | null
           notes: string | null
+          security_type: 'common_stock' | 'preferred_stock'
+          minimum_amount: number | null
+          maximum_amount: number | null
+          option_pool_increase: number
+          target_ownership_percentage: number | null
+          calculated_price_per_share: number | null
           created_at: string
           updated_at: string
           created_by: string
@@ -477,6 +489,12 @@ export interface Database {
           price_per_share?: number | null
           lead_investor?: string | null
           notes?: string | null
+          security_type?: 'common_stock' | 'preferred_stock'
+          minimum_amount?: number | null
+          maximum_amount?: number | null
+          option_pool_increase?: number
+          target_ownership_percentage?: number | null
+          calculated_price_per_share?: number | null
           created_at?: string
           updated_at?: string
           created_by: string
@@ -494,6 +512,12 @@ export interface Database {
           price_per_share?: number | null
           lead_investor?: string | null
           notes?: string | null
+          security_type?: 'common_stock' | 'preferred_stock'
+          minimum_amount?: number | null
+          maximum_amount?: number | null
+          option_pool_increase?: number
+          target_ownership_percentage?: number | null
+          calculated_price_per_share?: number | null
           created_at?: string
           updated_at?: string
           created_by?: string

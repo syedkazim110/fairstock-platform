@@ -8,6 +8,7 @@ export default function CreateCompanyModal() {
   const [isOpen, setIsOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [authorizedShares, setAuthorizedShares] = useState('10000000')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -33,6 +34,8 @@ export default function CreateCompanyModal() {
           name,
           description: description || null,
           owner_id: user.id,
+          authorized_shares: parseFloat(authorizedShares),
+          share_calculation_method: 'fully_diluted',
         })
         .select()
         .single()
@@ -56,6 +59,7 @@ export default function CreateCompanyModal() {
       // Reset form and close modal
       setName('')
       setDescription('')
+      setAuthorizedShares('10000000')
       setIsOpen(false)
       
       // Refresh the page to show the new company
@@ -121,6 +125,30 @@ export default function CreateCompanyModal() {
                   disabled={loading}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none disabled:opacity-50"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="authorizedShares" className="block text-sm font-medium text-gray-700 mb-1">
+                  Authorized Shares *
+                  <span className="ml-2 text-xs text-gray-500 font-normal">
+                    ℹ️ Total shares authorized in your articles of incorporation
+                  </span>
+                </label>
+                <input
+                  id="authorizedShares"
+                  type="number"
+                  value={authorizedShares}
+                  onChange={(e) => setAuthorizedShares(e.target.value)}
+                  placeholder="10000000"
+                  required
+                  min="1"
+                  step="1"
+                  disabled={loading}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Common default: 10,000,000 shares. This can be changed later in company settings.
+                </p>
               </div>
 
               {error && (
