@@ -16,98 +16,111 @@ export default async function DashboardPage() {
     redirect('/')
   }
 
-  // Get user profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  // PHASE 1 & 3: Parallelize all queries using Promise.all()
+  // First, get basic user info and memberships to determine accessible companies
+  const [
+    { data: profile },
+    { data: ownedCompanies },
+    { data: membershipData },
+    { data: capTableHoldings },
+    { data: equityGrantHoldings },
+    { data: convertibleHoldings },
+    { signatures: pendingSignatures }
+  ] = await Promise.all([
+    // PHASE 4: Get user profile - only needed columns
+    supabase
+      .from('profiles')
+      .select('id, email, full_name')
+      .eq('id', user.id)
+      .single(),
 
-  // Get companies owned by the user
-  const { data: ownedCompanies } = await supabase
-    .from('companies')
-    .select('*')
-    .eq('owner_id', user.id)
-    .order('created_at', { ascending: false })
-
-  // Get companies where user is a board member
-  // First get the memberships
-  const { data: membershipData } = await supabase
-    .from('company_members')
-    .select('company_id')
-    .eq('user_id', user.id)
-    .eq('role', 'board_member')
-    .eq('status', 'active')
-
-  // Then fetch the company details using service role to bypass RLS
-  let memberCompanies = []
-  if (membershipData && membershipData.length > 0) {
-    const companyIds = membershipData.map(m => m.company_id)
-    const { data: companiesData } = await supabase
+    // PHASE 4: Get companies owned by the user - only needed columns
+    supabase
       .from('companies')
-      .select('*')
-      .in('id', companyIds)
-    
-    memberCompanies = companiesData || []
-  }
+      .select('id, name, description, owner_id, created_at, authorized_shares, share_calculation_method, updated_at')
+      .eq('owner_id', user.id)
+      .order('created_at', { ascending: false }),
 
-  // Get user's holdings (cap table entries) - without companies relationship to avoid RLS recursion
-  const { data: capTableHoldings } = await supabase
-    .from('cap_table_entries')
-    .select('*')
-    .or(`user_id.eq.${user.id},holder_email.eq.${profile?.email}`)
+    // Get companies where user is a board member
+    supabase
+      .from('company_members')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('role', 'board_member')
+      .eq('status', 'active'),
 
-  // Get user's equity grants
-  const { data: equityGrantHoldings } = await supabase
-    .from('equity_grants')
-    .select('*')
-    .or(`user_id.eq.${user.id},recipient_email.eq.${profile?.email}`)
+    // PHASE 4: Get user's holdings - only needed columns
+    supabase
+      .from('cap_table_entries')
+      .select('id, company_id, shares, holder_type, equity_type, user_id, holder_email, total_value')
+      .or(`user_id.eq.${user.id},holder_email.eq.${user.email}`),
 
-  // Get user's convertible instruments
-  const { data: convertibleHoldings } = await supabase
-    .from('convertible_instruments')
-    .select('*')
-    .or(`user_id.eq.${user.id},investor_email.eq.${profile?.email}`)
+    // PHASE 4: Get user's equity grants - only needed columns
+    supabase
+      .from('equity_grants')
+      .select('id, company_id, total_shares, grant_type, user_id, recipient_email, vested_shares, exercise_price')
+      .or(`user_id.eq.${user.id},recipient_email.eq.${user.email}`),
 
-  // Get unique company IDs from all holdings
-  const companyIds = new Set([
+    // PHASE 4: Get user's convertible instruments - only needed columns
+    supabase
+      .from('convertible_instruments')
+      .select('id, company_id, instrument_type, user_id, investor_email, principal_amount, valuation_cap')
+      .or(`user_id.eq.${user.id},investor_email.eq.${user.email}`),
+
+    // Get pending documents for signature
+    getPendingDocuments()
+  ])
+
+  // PHASE 3: Get all unique company IDs from all sources
+  const allCompanyIds = new Set([
+    ...(ownedCompanies?.map(c => c.id) || []),
+    ...(membershipData?.map(m => m.company_id) || []),
     ...(capTableHoldings?.map(h => h.company_id) || []),
     ...(equityGrantHoldings?.map(h => h.company_id) || []),
     ...(convertibleHoldings?.map(h => h.company_id) || [])
   ])
 
-  // Fetch companies separately using service role to bypass RLS
-  const { data: holdingCompanies } = await supabase
-    .from('companies')
-    .select('*')
-    .in('id', Array.from(companyIds))
+  // PHASE 3 & 4: Fetch companies - only needed columns
+  // PHASE 5: Now fetch cap table entries only for accessible companies (smart filtering)
+  const [
+    { data: allCompanies },
+    { data: allCapTableEntries }
+  ] = await Promise.all([
+    supabase
+      .from('companies')
+      .select('id, name, description, owner_id, created_at, authorized_shares, share_calculation_method, updated_at')
+      .in('id', Array.from(allCompanyIds)),
+    
+    // PHASE 5: Only fetch cap table entries for companies user has access to
+    allCompanyIds.size > 0
+      ? supabase
+          .from('cap_table_entries')
+          .select('company_id, shares, equity_type')
+          .in('company_id', Array.from(allCompanyIds))
+      : Promise.resolve({ data: [] })
+  ])
 
   // Create a map for quick company lookup
   const companiesMap: Record<string, any> = {}
-  holdingCompanies?.forEach(company => {
+  allCompanies?.forEach(company => {
     companiesMap[company.id] = company
   })
 
-  // Get total shares for each company to calculate ownership percentage
-  const uniqueCompanyIds = new Set([
-    ...(capTableHoldings?.map((h: any) => h.company_id) || []),
-    ...(equityGrantHoldings?.map((h: any) => h.company_id) || []),
-    ...(convertibleHoldings?.map((h: any) => h.company_id) || [])
-  ])
+  // Separate companies by type
+  const memberCompanies = membershipData
+    ?.map(m => companiesMap[m.company_id])
+    .filter(Boolean) || []
 
+  // PHASE 2: Calculate total shares for each company in-memory (no N+1 queries!)
   const companyTotalShares: Record<string, number> = {}
-  for (const companyId of uniqueCompanyIds) {
-    const { data: allEntries } = await supabase
-      .from('cap_table_entries')
-      .select('shares')
-      .eq('company_id', companyId)
-      .neq('equity_type', 'option')
-    
-    const total = allEntries?.reduce((sum: number, entry: any) => sum + Number(entry.shares), 0) || 0
-    companyTotalShares[companyId] = total
-  }
+  allCapTableEntries?.forEach((entry: any) => {
+    if (entry.equity_type !== 'option') {
+      companyTotalShares[entry.company_id] = 
+        (companyTotalShares[entry.company_id] || 0) + Number(entry.shares)
+    }
+  })
 
-  // Combine all holdings with company data from the map
+  // Combine all holdings with company data
   const holdings = [
     ...(capTableHoldings?.map((h: any) => ({
       capTableEntry: h,
@@ -124,13 +137,10 @@ export default async function DashboardPage() {
     })) || [])
   ]
 
-  // Filter out holdings for companies the user owns (they see those in "My Companies" section)
+  // Filter out holdings for companies the user owns
   const shareholderHoldings = holdings.filter((h: any) => 
     h.company && h.company.owner_id !== user.id
   )
-
-  // Get pending documents for signature
-  const { signatures: pendingSignatures } = await getPendingDocuments()
 
   return (
     <main className="min-h-screen bg-gray-50">

@@ -171,14 +171,23 @@ export async function getPendingDocuments() {
     return { error: 'Not authenticated' }
   }
 
-  // Get pending signature requests for the current user
-  const { data: signatures, error } = await supabase
+  // PHASE 6: Get pending signature requests - only fetch needed columns
+  const { data: rawSignatures, error } = await supabase
     .from('document_signatures')
     .select(`
-      *,
-      documents (
-        *,
-        companies (
+      id,
+      status,
+      created_at,
+      document_id,
+      documents!inner (
+        id,
+        title,
+        description,
+        file_name,
+        file_size,
+        created_at,
+        company_id,
+        companies!inner (
           name
         )
       )
@@ -191,6 +200,24 @@ export async function getPendingDocuments() {
     console.error('Error fetching pending documents:', error)
     return { error: 'Failed to fetch pending documents' }
   }
+
+  // Transform the data to match the expected type structure (single objects instead of arrays)
+  const signatures = rawSignatures?.map((sig: any) => ({
+    id: sig.id,
+    status: sig.status,
+    created_at: sig.created_at,
+    documents: {
+      id: sig.documents.id,
+      title: sig.documents.title,
+      description: sig.documents.description,
+      file_name: sig.documents.file_name,
+      file_size: sig.documents.file_size,
+      created_at: sig.documents.created_at,
+      companies: {
+        name: sig.documents.companies.name
+      }
+    }
+  })) || []
 
   return { signatures }
 }
