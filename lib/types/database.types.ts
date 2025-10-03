@@ -106,6 +106,7 @@ export interface Database {
           title: string
           description: string | null
           file_path: string
+          signed_file_path: string | null
           file_name: string
           file_size: number
           file_type: string
@@ -121,6 +122,7 @@ export interface Database {
           title: string
           description?: string | null
           file_path: string
+          signed_file_path?: string | null
           file_name: string
           file_size: number
           file_type: string
@@ -136,6 +138,7 @@ export interface Database {
           title?: string
           description?: string | null
           file_path?: string
+          signed_file_path?: string | null
           file_name?: string
           file_size?: number
           file_type?: string

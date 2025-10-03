@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { addSignaturePageToPdf } from '@/lib/pdf-signature'
 
 export async function uploadDocument(formData: FormData) {
   const supabase = await createClient()
@@ -300,6 +301,181 @@ export async function signDocument(signatureId: string, signatureData: string) {
     user_agent: null,
   })
 
+  // Check if all signatures are now complete
+  const { data: allSignatures, error: signaturesError } = await supabase
+    .from('document_signatures')
+    .select(`
+      id,
+      status,
+      signature_data,
+      signed_at,
+      profiles!board_member_id (
+        full_name,
+        email
+      )
+    `)
+    .eq('document_id', signature.document_id)
+
+  console.log('=== SIGNATURE CHECK DEBUG ===')
+  console.log('Signatures query error:', signaturesError)
+  console.log('All signatures data:', allSignatures)
+  console.log('Document file type:', signature.documents.file_type)
+
+  if (allSignatures) {
+    const allSigned = allSignatures.every((sig) => sig.status === 'signed')
+    console.log('All signed?', allSigned)
+    console.log('Total signatures:', allSignatures.length)
+    console.log('Signed count:', allSignatures.filter(s => s.status === 'signed').length)
+    
+    // If all signatures are complete, generate the signed PDF
+    if (allSigned && signature.documents.file_type === 'application/pdf') {
+      console.log('✅ Starting PDF generation process...')
+      console.log('Document ID:', signature.document_id)
+      console.log('Document title:', signature.documents.title)
+      console.log('Document file_path:', signature.documents.file_path)
+      
+      try {
+        console.log('Step 1: Downloading original PDF...')
+        // Download the original PDF from storage
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from('documents')
+          .download(signature.documents.file_path)
+
+        console.log('Download result:', { hasData: !!fileData, error: downloadError })
+        
+        if (downloadError) {
+          console.error('❌ CRITICAL: Download failed:', downloadError)
+          throw new Error(`Failed to download PDF: ${downloadError.message}`)
+        }
+
+        if (!downloadError && fileData) {
+          console.log('Step 2: Converting to ArrayBuffer...')
+          // Convert blob to ArrayBuffer
+          const arrayBuffer = await fileData.arrayBuffer()
+          console.log('ArrayBuffer size:', arrayBuffer.byteLength)
+
+          console.log('Step 3: Preparing signature info...')
+          // Prepare signature information
+          const signatureInfo = allSignatures.map((sig: any) => {
+            const profile = Array.isArray(sig.profiles) ? sig.profiles[0] : sig.profiles
+            return {
+              signerName: profile?.full_name || profile?.email || 'Unknown',
+              signerEmail: profile?.email || '',
+              signatureData: sig.signature_data || '',
+              signedAt: sig.signed_at || new Date().toISOString(),
+            }
+          })
+          console.log('Signature info prepared:', signatureInfo.length, 'signatures')
+
+          console.log('Step 4: Generating signed PDF with signature page...')
+          // Generate the signed PDF with signature page
+          const signedPdfBytes = await addSignaturePageToPdf(
+            arrayBuffer,
+            signature.documents.title,
+            signatureInfo
+          )
+          console.log('Step 5: PDF generated, size:', signedPdfBytes.byteLength)
+
+          // Generate filename for signed PDF
+          const originalPath = signature.documents.file_path
+          const pathParts = originalPath.split('.')
+          const signedPath = `${pathParts.slice(0, -1).join('.')}-signed.${pathParts[pathParts.length - 1]}`
+
+          // Upload signed PDF to storage using service role to bypass RLS
+          // This is safe because the signature has already been validated and all signers approved
+          const { createClient: createServiceClient } = await import('@supabase/supabase-js')
+          
+          // Debug: Check if service role key is available
+          const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+          if (!serviceRoleKey) {
+            console.error('SUPABASE_SERVICE_ROLE_KEY is not set in environment variables')
+            throw new Error('Service role key not configured')
+          }
+          
+          const serviceSupabase = createServiceClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            serviceRoleKey,
+            {
+              auth: {
+                autoRefreshToken: false,
+                persistSession: false
+              }
+            }
+          )
+
+          const { error: uploadError } = await serviceSupabase.storage
+            .from('documents')
+            .upload(signedPath, signedPdfBytes, {
+              contentType: 'application/pdf',
+              upsert: true,
+            })
+          
+          if (uploadError) {
+            console.error('❌ CRITICAL: Error uploading signed PDF:', uploadError)
+            console.error('Upload details:', {
+              signedPath,
+              hasServiceKey: !!serviceRoleKey,
+              bucketName: 'documents',
+              uploadErrorMessage: uploadError.message
+            })
+            throw new Error(`Failed to upload signed PDF: ${uploadError.message}`)
+          }
+
+          console.log('✅ Upload successful, updating database...')
+          
+          if (!uploadError) {
+            // Update document record with signed file path AND status using service role
+            // We need service role here because board members don't have UPDATE permission on documents table
+            const { error: updateError } = await serviceSupabase
+              .from('documents')
+              .update({ 
+                signed_file_path: signedPath,
+                status: 'fully_signed'
+              })
+              .eq('id', signature.document_id)
+
+            if (updateError) {
+              console.error('❌ Failed to update document:', updateError)
+              throw new Error(`Database update failed: ${updateError.message}`)
+            }
+
+            console.log('✅ Document updated with signed PDF path and status set to fully_signed')
+
+            // Create audit log for signed PDF generation
+            await supabase.from('document_audit_log').insert({
+              document_id: signature.document_id,
+              user_id: user.id,
+              action: 'uploaded',
+              details: {
+                action_type: 'signed_pdf_generated',
+                message: 'Signed PDF with signature page generated',
+              },
+              ip_address: null,
+              user_agent: null,
+            })
+          } else {
+            console.error('Error uploading signed PDF:', uploadError)
+          }
+        }
+      } catch (pdfError) {
+        console.error('❌ CRITICAL ERROR in PDF generation:', pdfError)
+        console.error('Error details:', {
+          message: pdfError instanceof Error ? pdfError.message : String(pdfError),
+          stack: pdfError instanceof Error ? pdfError.stack : undefined,
+          documentId: signature.document_id,
+          documentTitle: signature.documents.title
+        })
+        // Don't fail the signature process if PDF generation fails, but log extensively
+      }
+    } else {
+      console.log('Skipping PDF generation:', {
+        allSigned,
+        fileType: signature.documents.file_type,
+        reason: !allSigned ? 'Not all signatures complete' : 'Not a PDF file'
+      })
+    }
+  }
+
   revalidatePath(`/company/${signature.company_id}/documents`)
   revalidatePath('/dashboard')
   
@@ -393,8 +569,12 @@ export async function deleteDocument(documentId: string) {
     return { error: 'Not authorized to delete this document' }
   }
 
-  // Delete file from storage
-  await supabase.storage.from('documents').remove([document.file_path])
+  // Delete files from storage (both original and signed if exists)
+  const filesToDelete = [document.file_path]
+  if (document.signed_file_path) {
+    filesToDelete.push(document.signed_file_path)
+  }
+  await supabase.storage.from('documents').remove(filesToDelete)
 
   // Delete document (cascade will handle signatures and audit logs)
   const { error: deleteError } = await supabase

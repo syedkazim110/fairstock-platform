@@ -20,6 +20,7 @@ interface Document {
   description: string | null
   file_name: string
   file_path: string
+  signed_file_path: string | null
   file_size: number
   status: 'pending' | 'partially_signed' | 'fully_signed' | 'cancelled'
   created_at: string
@@ -254,36 +255,52 @@ export default function DocumentList({ documents, isOwner, onRefresh }: Document
                 )}
               </div>
 
-              <div className="ml-4 flex items-center gap-2">
-                <button
-                  onClick={() => handleViewDocument(doc.file_path)}
-                  disabled={viewingId === doc.file_path}
-                  className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
-                  title="View document"
-                >
-                  {viewingId === doc.file_path ? 'Opening...' : 'View'}
-                </button>
-                
-                {isOwner && (
+              <div className="ml-4 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleDelete(doc.id)}
-                    disabled={deletingId === doc.id}
-                    className="text-red-600 hover:text-red-800 disabled:opacity-50"
-                    title="Delete document"
+                    onClick={() => handleViewDocument(doc.file_path)}
+                    disabled={viewingId === doc.file_path}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                    title="View original document"
                   >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
+                    {viewingId === doc.file_path ? 'Opening...' : 'View Original'}
+                  </button>
+                  
+                  {isOwner && (
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      disabled={deletingId === doc.id}
+                      className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                      title="Delete document"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                
+                {doc.signed_file_path && doc.status === 'fully_signed' && (
+                  <button
+                    onClick={() => handleViewDocument(doc.signed_file_path!)}
+                    disabled={viewingId === doc.signed_file_path}
+                    className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                    title="View signed document with signatures"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
+                    {viewingId === doc.signed_file_path ? 'Opening...' : 'View Signed PDF'}
                   </button>
                 )}
               </div>
