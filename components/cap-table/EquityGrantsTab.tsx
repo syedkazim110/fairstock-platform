@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Database } from '@/lib/types/database.types'
 import { createClient } from '@/lib/supabase/client'
+import FormattedNumberInput from '@/components/ui/FormattedNumberInput'
 
 type Company = Database['public']['Tables']['companies']['Row']
 type EquityGrant = Database['public']['Tables']['equity_grants']['Row']
@@ -284,13 +285,12 @@ export default function EquityGrantsTab({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Shares *</label>
-                  <input
-                    type="number"
-                    required
-                    step="0.0001"
+                  <FormattedNumberInput
                     value={formData.total_shares}
-                    onChange={(e) => setFormData({ ...formData, total_shares: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(value) => setFormData({ ...formData, total_shares: value })}
+                    decimals={4}
+                    placeholder="100,000"
+                    required
                   />
                 </div>
 
@@ -337,12 +337,11 @@ export default function EquityGrantsTab({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Exercise Price</label>
-                  <input
-                    type="number"
-                    step="0.0001"
+                  <FormattedNumberInput
                     value={formData.exercise_price}
-                    onChange={(e) => setFormData({ ...formData, exercise_price: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(value) => setFormData({ ...formData, exercise_price: value })}
+                    decimals={4}
+                    placeholder="0.10"
                   />
                 </div>
 

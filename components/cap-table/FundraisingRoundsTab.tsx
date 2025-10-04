@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Database } from '@/lib/types/database.types'
 import { createClient } from '@/lib/supabase/client'
+import FormattedNumberInput from '@/components/ui/FormattedNumberInput'
 
 type Company = Database['public']['Tables']['companies']['Row']
 type FundraisingRound = Database['public']['Tables']['fundraising_rounds']['Row']
@@ -375,14 +376,12 @@ export default function FundraisingRoundsTab({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Target Amount to Raise *
                     </label>
-                    <input
-                      type="number"
-                      required
-                      step="0.01"
-                      placeholder="1000000"
+                    <FormattedNumberInput
                       value={formData.amount_raised}
-                      onChange={(e) => setFormData({ ...formData, amount_raised: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(value) => setFormData({ ...formData, amount_raised: value })}
+                      decimals={2}
+                      placeholder="1,000,000"
+                      required
                     />
                   </div>
 
@@ -390,14 +389,12 @@ export default function FundraisingRoundsTab({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Pre-Money Valuation *
                     </label>
-                    <input
-                      type="number"
-                      required
-                      step="0.01"
-                      placeholder="5000000"
+                    <FormattedNumberInput
                       value={formData.valuation_pre_money}
-                      onChange={(e) => setFormData({ ...formData, valuation_pre_money: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(value) => setFormData({ ...formData, valuation_pre_money: value })}
+                      decimals={2}
+                      placeholder="5,000,000"
+                      required
                     />
                   </div>
 
@@ -406,13 +403,11 @@ export default function FundraisingRoundsTab({
                       Minimum Amount (Optional)
                       <span className="ml-1 text-xs text-gray-500">Below which offering is abandoned</span>
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="500000"
+                    <FormattedNumberInput
                       value={formData.minimum_amount}
-                      onChange={(e) => setFormData({ ...formData, minimum_amount: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(value) => setFormData({ ...formData, minimum_amount: value })}
+                      decimals={2}
+                      placeholder="500,000"
                     />
                   </div>
 
@@ -421,13 +416,11 @@ export default function FundraisingRoundsTab({
                       Maximum Amount (Optional)
                       <span className="ml-1 text-xs text-gray-500">Beyond which no more funds accepted</span>
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="1500000"
+                    <FormattedNumberInput
                       value={formData.maximum_amount}
-                      onChange={(e) => setFormData({ ...formData, maximum_amount: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(value) => setFormData({ ...formData, maximum_amount: value })}
+                      decimals={2}
+                      placeholder="1,500,000"
                     />
                   </div>
                 </div>
@@ -457,14 +450,12 @@ export default function FundraisingRoundsTab({
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Number of Shares to Reserve *
                       </label>
-                      <input
-                        type="number"
-                        required={formData.create_option_pool}
-                        step="1"
-                        placeholder="1000000"
+                      <FormattedNumberInput
                         value={formData.option_pool_shares}
-                        onChange={(e) => setFormData({ ...formData, option_pool_shares: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(value) => setFormData({ ...formData, option_pool_shares: value })}
+                        decimals={0}
+                        placeholder="1,000,000"
+                        required={formData.create_option_pool}
                       />
                     </div>
                   )}
@@ -477,13 +468,11 @@ export default function FundraisingRoundsTab({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Post-Money Valuation (Optional)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="6000000"
+                    <FormattedNumberInput
                       value={formData.valuation_post_money}
-                      onChange={(e) => setFormData({ ...formData, valuation_post_money: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(value) => setFormData({ ...formData, valuation_post_money: value })}
+                      decimals={2}
+                      placeholder="6,000,000"
                     />
                   </div>
 
@@ -516,12 +505,11 @@ export default function FundraisingRoundsTab({
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Shares Issued (Optional)</label>
-                    <input
-                      type="number"
-                      step="0.0001"
+                    <FormattedNumberInput
                       value={formData.shares_issued}
-                      onChange={(e) => setFormData({ ...formData, shares_issued: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(value) => setFormData({ ...formData, shares_issued: value })}
+                      decimals={4}
+                      placeholder="2,000,000"
                     />
                   </div>
                 </div>

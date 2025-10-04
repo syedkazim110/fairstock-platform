@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/lib/types/database.types'
+import FormattedNumberInput from '@/components/ui/FormattedNumberInput'
 
 type Company = Database['public']['Tables']['companies']['Row']
 
@@ -112,16 +113,13 @@ export default function CompanySettings({ company }: CompanySettingsProps) {
               <label htmlFor="authorizedShares" className="block text-sm font-medium text-gray-700 mb-1">
                 Authorized Shares *
               </label>
-              <input
-                id="authorizedShares"
-                type="number"
+              <FormattedNumberInput
                 value={authorizedShares}
-                onChange={(e) => setAuthorizedShares(e.target.value)}
+                onChange={(value) => setAuthorizedShares(value)}
+                decimals={0}
+                placeholder="10,000,000"
                 required
-                min="1"
-                step="1"
                 disabled={loading}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
               />
               <p className="mt-1 text-sm text-gray-500">
                 Total number of shares authorized in your articles of incorporation. This sets the maximum number of shares your company can issue.

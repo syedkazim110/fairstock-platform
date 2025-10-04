@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Database } from '@/lib/types/database.types'
 import { createClient } from '@/lib/supabase/client'
 import { convertInstrument } from '@/app/actions/company'
+import FormattedNumberInput from '@/components/ui/FormattedNumberInput'
 
 type Company = Database['public']['Tables']['companies']['Row']
 type ConvertibleInstrument = Database['public']['Tables']['convertible_instruments']['Row']
@@ -313,13 +314,12 @@ export default function ConvertibleInstrumentsTab({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Principal Amount *</label>
-                  <input
-                    type="number"
-                    required
-                    step="0.01"
+                  <FormattedNumberInput
                     value={formData.principal_amount}
-                    onChange={(e) => setFormData({ ...formData, principal_amount: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(value) => setFormData({ ...formData, principal_amount: value })}
+                    decimals={2}
+                    placeholder="100,000"
+                    required
                   />
                 </div>
 
@@ -336,12 +336,11 @@ export default function ConvertibleInstrumentsTab({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Valuation Cap</label>
-                  <input
-                    type="number"
-                    step="0.01"
+                  <FormattedNumberInput
                     value={formData.valuation_cap}
-                    onChange={(e) => setFormData({ ...formData, valuation_cap: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(value) => setFormData({ ...formData, valuation_cap: value })}
+                    decimals={2}
+                    placeholder="5,000,000"
                   />
                 </div>
 
@@ -514,22 +513,20 @@ export default function ConvertibleInstrumentsTab({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Conversion Price per Share *</label>
-                  <input
-                    type="number"
-                    required
-                    step="0.0001"
+                  <FormattedNumberInput
                     value={convertFormData.conversion_price}
-                    onChange={(e) => {
-                      const price = parseFloat(e.target.value)
+                    onChange={(value) => {
+                      const price = parseFloat(value)
                       const shares = price > 0 ? (selectedInstrument.principal_amount / price).toFixed(4) : ''
                       setConvertFormData({ 
                         ...convertFormData, 
-                        conversion_price: e.target.value,
+                        conversion_price: value,
                         shares: shares
                       })
                     }}
-                    placeholder="e.g., 1.50"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    decimals={4}
+                    placeholder="1.50"
+                    required
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     The price at which the instrument converts to equity
@@ -538,14 +535,12 @@ export default function ConvertibleInstrumentsTab({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Resulting Shares *</label>
-                  <input
-                    type="number"
-                    required
-                    step="0.0001"
+                  <FormattedNumberInput
                     value={convertFormData.shares}
-                    onChange={(e) => setConvertFormData({ ...convertFormData, shares: e.target.value })}
-                    placeholder="Calculated automatically"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(value) => setConvertFormData({ ...convertFormData, shares: value })}
+                    decimals={4}
+                    placeholder="66,666.67"
+                    required
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Principal ({formatCurrency(selectedInstrument.principal_amount)}) ÷ Conversion Price = Shares

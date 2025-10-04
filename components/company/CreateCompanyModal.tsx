@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import FormattedNumberInput from '@/components/ui/FormattedNumberInput'
 
 export default function CreateCompanyModal() {
   const [isOpen, setIsOpen] = useState(false)
@@ -134,17 +135,13 @@ export default function CreateCompanyModal() {
                     ℹ️ Total shares authorized in your articles of incorporation
                   </span>
                 </label>
-                <input
-                  id="authorizedShares"
-                  type="number"
+                <FormattedNumberInput
                   value={authorizedShares}
-                  onChange={(e) => setAuthorizedShares(e.target.value)}
-                  placeholder="10000000"
+                  onChange={(value) => setAuthorizedShares(value)}
+                  decimals={0}
+                  placeholder="10,000,000"
                   required
-                  min="1"
-                  step="1"
                   disabled={loading}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   Common default: 10,000,000 shares. This can be changed later in company settings.
